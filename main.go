@@ -10,9 +10,12 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
@@ -26,6 +29,12 @@ import (
 const (
 	host = "localhost"
 	port = "23234"
+)
+
+var gap = "\n\n"
+
+type (
+	errMsg error
 )
 
 func main() {
@@ -67,7 +76,7 @@ func main() {
 // tea.WithAltScreen) on a session by session basis.
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// This should never fail, as we are using the activeterm middleware.
-	pty, _, _ := s.Pty()
+	// pty, _, _ := s.Pty()
 
 	// When running a Bubble Tea app over SSH, you shouldn't use the default
 	// lipgloss.NewStyle function.
@@ -78,57 +87,105 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// use it to create the styles.
 	// The recommended way to use these styles is to then pass them down to
 	// your Bubble Tea model.
-	renderer := bubbletea.MakeRenderer(s)
-	txtStyle := renderer.NewStyle().Foreground(lipgloss.Color("10"))
-	quitStyle := renderer.NewStyle().Foreground(lipgloss.Color("8"))
+	//
+	// renderer := bubbletea.MakeRenderer(s)
+	// messageStyle := renderer.NewStyle().Foreground(lipgloss.Color("22"))
+	// fromOtherStyle := renderer.NewStyle().Foreground(lipgloss.Color("23"))
+	// fromSelfStyle := renderer.NewStyle().Foreground(lipgloss.Color("24"))
 
-	bg := "light"
-	if renderer.HasDarkBackground() {
-		bg = "dark"
-	}
-
-	m := model{
-		term:      pty.Term,
-		profile:   renderer.ColorProfile().Name(),
-		width:     pty.Window.Width,
-		height:    pty.Window.Height,
-		bg:        bg,
-		txtStyle:  txtStyle,
-		quitStyle: quitStyle,
-	}
-	return m, []tea.ProgramOption{tea.WithAltScreen()}
+	return initialModel(s), []tea.ProgramOption{tea.WithAltScreen()}
 }
 
 // Just a generic tea.Model to demo terminal information of ssh.
 type model struct {
-	term      string
-	profile   string
-	width     int
-	height    int
-	bg        string
-	txtStyle  lipgloss.Style
-	quitStyle lipgloss.Style
+	viewport    viewport.Model
+	messages    []string
+	textarea    textarea.Model
+	senderStyle lipgloss.Style
+	err         error
+}
+
+func initialModel(s ssh.Session) model {
+	ta := textarea.New()
+	ta.Placeholder = "Send a message..."
+	ta.Focus()
+
+	ta.Prompt = "┃ "
+	ta.CharLimit = 280
+
+	ta.SetWidth(30)
+	ta.SetHeight(3)
+
+	// Remove cursor line styling
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+
+	ta.ShowLineNumbers = false
+
+	vp := viewport.New(30, 5)
+	vp.SetContent(`Welcome to the chat room!
+Type a message and press Enter to send.`)
+
+	ta.KeyMap.InsertNewline.SetEnabled(false)
+
+	return model{
+		textarea:    ta,
+		messages:    []string{},
+		viewport:    vp,
+		senderStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		err:         nil,
+	}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return textarea.Blink
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		tiCmd tea.Cmd
+		vpCmd tea.Cmd
+	)
+
+	m.textarea, tiCmd = m.textarea.Update(msg)
+	m.viewport, vpCmd = m.viewport.Update(msg)
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.height = msg.Height
-		m.width = msg.Width
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
+		m.viewport.Width = msg.Width
+		m.textarea.SetWidth(msg.Width)
+		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(gap)
+
+		if len(m.messages) > 0 {
+			// Wrap content before setting it.
+			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
 		}
+		m.viewport.GotoBottom()
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc:
+			fmt.Println(m.textarea.Value())
+			return m, tea.Quit
+		case tea.KeyEnter:
+			m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
+			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.textarea.Reset()
+			m.viewport.GotoBottom()
+		}
+
+	// We handle errors just like any other message
+	case errMsg:
+		m.err = msg
+		return m, nil
 	}
-	return m, nil
+
+	return m, tea.Batch(tiCmd, vpCmd)
 }
 
 func (m model) View() string {
-	s := fmt.Sprintf("Your term is %s\nYour window size is %dx%d\nBackground: %s\nColor Profile: %s", m.term, m.width, m.height, m.bg, m.profile)
-	return m.txtStyle.Render(s) + "\n\n" + m.quitStyle.Render("Press 'q' to quit\n")
+	return fmt.Sprintf(
+		"%s%s%s",
+		m.viewport.View(),
+		gap,
+		m.textarea.View(),
+	)
 }
