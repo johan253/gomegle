@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/timer"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -28,11 +29,15 @@ import (
 )
 
 const (
-	host = "localhost"
-	port = "23234"
+	host          = "localhost"
+	port          = "23234"
+	splashMessage = "Welcome to GoMegle"
 )
 
-var gap = "\n\n"
+var (
+	gap         = "\n\n"
+	splashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+)
 
 type (
 	errMsg error
@@ -99,15 +104,18 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 
 // Just a generic tea.Model to demo terminal information of ssh.
 type model struct {
-	width       int
-	height      int
-	renderer    *lipgloss.Renderer
-	splashTimer timer.Model
-	viewport    viewport.Model
-	messages    []string
-	textarea    textarea.Model
-	senderStyle lipgloss.Style
-	err         error
+	width           int
+	height          int
+	renderer        *lipgloss.Renderer
+	splashTimer     timer.Model
+	splashText      string
+	splashTextIndex int
+	splashSpinner   spinner.Model
+	viewport        viewport.Model
+	messages        []string
+	textarea        textarea.Model
+	senderStyle     lipgloss.Style
+	err             error
 }
 
 func initialModel(s ssh.Session) model {
@@ -132,23 +140,29 @@ Type a message and press Enter to send.`)
 
 	ta.KeyMap.InsertNewline.SetEnabled(false)
 
-	timer := timer.New(2 * time.Second)
+	timer := timer.NewWithInterval(2*time.Second, 30*time.Millisecond)
 	r := bubbletea.MakeRenderer(s)
+
+	ss := spinner.New()
+	ss.Spinner = spinner.Points
 	return model{
-		width:       30,
-		height:      10,
-		renderer:    r,
-		splashTimer: timer,
-		textarea:    ta,
-		messages:    []string{},
-		viewport:    vp,
-		senderStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		err:         nil,
+		width:           30,
+		height:          10,
+		renderer:        r,
+		splashTimer:     timer,
+		splashText:      "",
+		splashTextIndex: 0,
+		splashSpinner:   ss,
+		textarea:        ta,
+		messages:        []string{},
+		viewport:        vp,
+		senderStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		err:             nil,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.splashTimer.Init())
+	return tea.Batch(textarea.Blink, m.splashTimer.Init(), m.splashSpinner.Tick)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -156,6 +170,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		taCmd tea.Cmd
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
+		ssCmd tea.Cmd
 	)
 
 	m.textarea, taCmd = m.textarea.Update(msg)
@@ -187,14 +202,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 		}
 	case timer.TickMsg:
+		if m.splashTextIndex < len(splashMessage) {
+			// If the splash text is not complete, we append the next character.
+			m.splashText = m.splashText + splashMessage[m.splashTextIndex:m.splashTextIndex+1]
+			m.splashTextIndex++
+		}
 		m.splashTimer, tiCmd = m.splashTimer.Update(msg)
+	// Handle splash spinner ticks
+	case spinner.TickMsg:
+		m.splashSpinner, ssCmd = m.splashSpinner.Update(msg)
 	// We handle errors just like any other message
 	case errMsg:
 		m.err = msg
 		return m, nil
 	}
 
-	return m, tea.Batch(taCmd, tiCmd, vpCmd)
+	return m, tea.Batch(taCmd, tiCmd, vpCmd, ssCmd)
 }
 
 func (m model) View() string {
@@ -210,10 +233,11 @@ func (m model) View() string {
 }
 
 func splashView(m model) string {
-	message := "Welcome to " +
-		m.renderer.NewStyle().
-			Foreground(lipgloss.Color("3")).
-			Render("GoMegle")
-	innerText := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, message)
-	return innerText
+	// textWidth := lipgloss.Width(splashMessage)
+	// textHeight := lipgloss.Height(splashMessage)
+	var spinner string
+	if m.splashTextIndex >= len(splashMessage) {
+		spinner = m.splashSpinner.View()
+	}
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, fmt.Sprintf("%s %s", m.splashText, splashStyle.Render(spinner)))
 }
