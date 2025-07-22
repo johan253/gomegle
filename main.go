@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/timer"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -98,6 +99,10 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 
 // Just a generic tea.Model to demo terminal information of ssh.
 type model struct {
+	width       int
+	height      int
+	renderer    *lipgloss.Renderer
+	splashTimer timer.Model
 	viewport    viewport.Model
 	messages    []string
 	textarea    textarea.Model
@@ -127,7 +132,13 @@ Type a message and press Enter to send.`)
 
 	ta.KeyMap.InsertNewline.SetEnabled(false)
 
+	timer := timer.New(2 * time.Second)
+	r := bubbletea.MakeRenderer(s)
 	return model{
+		width:       30,
+		height:      10,
+		renderer:    r,
+		splashTimer: timer,
 		textarea:    ta,
 		messages:    []string{},
 		viewport:    vp,
@@ -137,20 +148,24 @@ Type a message and press Enter to send.`)
 }
 
 func (m model) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(textarea.Blink, m.splashTimer.Init())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
+		taCmd tea.Cmd
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
 	)
 
-	m.textarea, tiCmd = m.textarea.Update(msg)
+	m.textarea, taCmd = m.textarea.Update(msg)
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 		m.viewport.Width = msg.Width
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(gap)
@@ -161,31 +176,44 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.viewport.GotoBottom()
 	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
+		switch msg.String() {
+		case "ctrl+c", "q":
 			fmt.Println(m.textarea.Value())
 			return m, tea.Quit
-		case tea.KeyEnter:
+		case "enter":
 			m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
 			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
 			m.textarea.Reset()
 			m.viewport.GotoBottom()
 		}
-
+	case timer.TickMsg:
+		m.splashTimer, tiCmd = m.splashTimer.Update(msg)
 	// We handle errors just like any other message
 	case errMsg:
 		m.err = msg
 		return m, nil
 	}
 
-	return m, tea.Batch(tiCmd, vpCmd)
+	return m, tea.Batch(taCmd, tiCmd, vpCmd)
 }
 
 func (m model) View() string {
+	if !m.splashTimer.Timedout() {
+		return splashView(m)
+	}
 	return fmt.Sprintf(
 		"%s%s%s",
 		m.viewport.View(),
 		gap,
 		m.textarea.View(),
 	)
+}
+
+func splashView(m model) string {
+	message := "Welcome to " +
+		m.renderer.NewStyle().
+			Foreground(lipgloss.Color("3")).
+			Render("GoMegle")
+	innerText := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, message)
+	return innerText
 }
