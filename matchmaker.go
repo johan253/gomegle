@@ -103,7 +103,6 @@ func (m *Matchmaker) Dequeue(u *User) {
 	for i, user := range m.queue {
 		if user == u {
 			// Close the send channel to signal that the user has left
-			close(user.send)
 			m.queue = append(m.queue[:i], m.queue[i+1:]...) // Remove user from queue
 			return
 		}

@@ -143,6 +143,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
+			// If the user is in the queue, remove them and close thier channel
+			if !m.matched {
+				globalMatchmaker.Dequeue(m.user)
+			}
+			close(m.user.receive)
 			// Exit the program
 			return m, tea.Quit
 		case "enter":
