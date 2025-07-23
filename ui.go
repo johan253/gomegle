@@ -42,6 +42,7 @@ type model struct {
 	err             error              // Captured errors
 	user            *User              // User channels for sending/receiving
 	matched         bool               // Whether user has been matched
+	promptRequeue   bool               // Whether to prompt user to requeue after getting unmatched
 }
 
 // teaHandler wires a Bubble Tea model to a new SSH session.
@@ -98,6 +99,7 @@ func initialModel(s ssh.Session) model {
 		senderStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 		user:            user,
 		matched:         false,
+		promptRequeue:   false, // Initially not prompting for requeue
 	}
 }
 
@@ -170,16 +172,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case m.user.send <- chatMsg:
 					// Message sent successfully, add to our view
 					m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
-					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
-					m.textarea.Reset()
-					m.viewport.GotoBottom()
 				default:
 					// Channel is full or closed, show error
 					m.messages = append(m.messages, "Error: Could not send message")
-					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
-					m.viewport.GotoBottom()
+
 				}
+			} else if m.promptRequeue && m.textarea.Value() == "r" {
+				// If prompted to requeue, re-add user to matchmaker
+				globalMatchmaker.Enqueue(m.user)
+				m.promptRequeue = false
+				m.messages = append(m.messages, "Requeued! Waiting for a new match...")
+
 			}
+			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.viewport.GotoBottom()
+			m.textarea.Reset()
 		}
 
 	case chatMsgReceived:
@@ -187,12 +194,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case ChatMsgTypeJoin:
 			m.matched = true
+			m.promptRequeue = false
 			m.messages = append(m.messages, "✅ "+msg.Content)
 		case ChatMsgTypeMessage:
 			m.messages = append(m.messages, "Stranger: "+msg.Content)
 		case ChatMsgTypeLeave:
 			m.matched = false
+			m.promptRequeue = true
 			m.messages = append(m.messages, "❌ "+msg.Content)
+			m.messages = append(m.messages, "Send 'r' to requeue or press 'ctrl+c' to exit.")
 		case ChatMsgTypeError:
 			m.messages = append(m.messages, "🚨 "+msg.Content)
 		}
