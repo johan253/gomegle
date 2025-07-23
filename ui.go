@@ -40,6 +40,8 @@ type model struct {
 	textarea        textarea.Model     // Input field for user to type messages
 	senderStyle     lipgloss.Style     // Style for user's message prefix
 	err             error              // Captured errors
+	user            *User              // User channels for sending/receiving
+	matched         bool               // Whether user has been matched
 }
 
 // teaHandler wires a Bubble Tea model to a new SSH session.
@@ -64,7 +66,7 @@ func initialModel(s ssh.Session) model {
 
 	// Setup chat display
 	vp := viewport.New(30, 5)
-	vp.SetContent("Welcome to the chat room!\nType a message and press Enter to send.")
+	vp.SetContent("Welcome to GoMegle!\nLooking for someone to chat with...")
 
 	// Splash screen timer and spinner
 	timer := timer.NewWithInterval(2*time.Second, 30*time.Millisecond)
@@ -72,6 +74,15 @@ func initialModel(s ssh.Session) model {
 
 	ss := spinner.New()
 	ss.Spinner = spinner.Points
+
+	// Create user with channels and add to matchmaker
+	user := &User{
+		receive: make(chan ChatMsg, 100), // Buffered to prevent blocking
+		send:    nil,                     // Will be set when matched
+	}
+
+	// Add user to matchmaker queue
+	globalMatchmaker.Enqueue(user)
 
 	return model{
 		width:           30,
@@ -85,12 +96,19 @@ func initialModel(s ssh.Session) model {
 		messages:        []string{},
 		viewport:        vp,
 		senderStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		user:            user,
+		matched:         false,
 	}
 }
 
 // Init initializes the Bubble Tea program with starting commands.
 func (m model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.splashTimer.Init(), m.splashSpinner.Tick)
+	return tea.Batch(
+		textarea.Blink,
+		m.splashTimer.Init(),
+		m.splashSpinner.Tick,
+		m.user.ListenForMessages(), // Start listening for messages
+	)
 }
 
 // Update handles all message types and updates the model accordingly.
@@ -124,17 +142,55 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			// Exit the program
-			fmt.Println(m.textarea.Value())
 			return m, tea.Quit
 		case "enter":
-			// Append message and clear textarea
-			m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
-			m.textarea.Reset()
-			m.viewport.GotoBottom()
+			// Send message if matched and textarea has content
+			if m.matched && m.user.send != nil && m.textarea.Value() != "" {
+				chatMsg := ChatMsg{
+					Type:    ChatMsgTypeMessage,
+					Content: m.textarea.Value(),
+				}
+
+				// Send message to other user (non-blocking)
+				select {
+				case m.user.send <- chatMsg:
+					// Message sent successfully, add to our view
+					m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
+					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+					m.textarea.Reset()
+					m.viewport.GotoBottom()
+				default:
+					// Channel is full or closed, show error
+					m.messages = append(m.messages, "Error: Could not send message")
+					m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+					m.viewport.GotoBottom()
+				}
+			}
 		}
+
+	case chatMsgReceived:
+		// Handle received messages from other users
+		switch msg.Type {
+		case ChatMsgTypeJoin:
+			m.matched = true
+			m.messages = append(m.messages, "🎉 "+msg.Content)
+		case ChatMsgTypeMessage:
+			m.messages = append(m.messages, "Stranger: "+msg.Content)
+		case ChatMsgTypeLeave:
+			m.matched = false
+			m.messages = append(m.messages, "💔 "+msg.Content)
+		case ChatMsgTypeError:
+			m.messages = append(m.messages, "❌ "+msg.Content)
+		}
+
+		// Update viewport and scroll to bottom
+		m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+		m.viewport.GotoBottom()
+
+		// Continue listening for more messages
+		return m, m.user.ListenForMessages()
 
 	case timer.TickMsg:
 		// Splash text reveal logic
@@ -163,6 +219,14 @@ func (m model) View() string {
 	if !m.splashTimer.Timedout() {
 		return splashView(m)
 	}
+
+	// Show connection status in the input placeholder
+	if m.matched {
+		m.textarea.Placeholder = "Type your message..."
+	} else {
+		m.textarea.Placeholder = "Waiting for match..."
+	}
+
 	return fmt.Sprintf("%s%s%s", m.viewport.View(), gap, m.textarea.View())
 }
 

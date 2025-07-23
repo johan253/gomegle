@@ -27,7 +27,12 @@ const (
 	shutdownTime = 30 * time.Second
 )
 
+var globalMatchmaker *Matchmaker
+
 func main() {
+	// Initialize global matchmaker
+	globalMatchmaker = NewMatchMaker()
+
 	s, err := wish.NewServer(
 		wish.WithAddress(net.JoinHostPort(host, port)),
 		wish.WithHostKeyPath(hostKeyPath),

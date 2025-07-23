@@ -1,6 +1,10 @@
 package main
 
-import "sync"
+import (
+	"sync"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 type ChatMsgType int
 
@@ -16,20 +20,30 @@ type ChatMsg struct {
 	Content string      // Content of the message
 }
 
+// chatMsgReceived is a custom type to handle received chat messages in tea
+type chatMsgReceived ChatMsg
+
 type User struct {
 	receive chan ChatMsg // Channel to receive messages
 	send    chan ChatMsg // Channel to send messages
 }
 
+func (u *User) ListenForMessages() tea.Cmd {
+	return func() tea.Msg {
+		msg := <-u.receive // Blocking call to wait for a message
+		return chatMsgReceived(msg)
+	}
+}
+
 type Matchmaker struct {
-	queue []User        // Queue of users waiting to be matched
+	queue []*User       // Queue of users waiting to be matched
 	mu    sync.Mutex    // Mutex to protect access to the queue
 	added chan struct{} // Channel to signal a new user has been added
 }
 
 func NewMatchMaker() *Matchmaker {
 	m := &Matchmaker{
-		queue: make([]User, 0),
+		queue: make([]*User, 0),
 		mu:    sync.Mutex{},
 		added: make(chan struct{}, 1000), // Buffered channel to avoid blocking
 	}
@@ -38,9 +52,8 @@ func NewMatchMaker() *Matchmaker {
 }
 
 func (m *Matchmaker) matchUsers() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	for {
+		m.mu.Lock()
 		for len(m.queue) < 2 {
 			m.mu.Unlock() // Unlock while waiting for a new user
 			<-m.added     // Wait for a new user to be added
@@ -50,6 +63,7 @@ func (m *Matchmaker) matchUsers() {
 		u1 := m.queue[0]
 		u2 := m.queue[1]
 		m.queue = m.queue[2:] // Remove the matched users from the queue
+		m.mu.Unlock()
 
 		// Set up the channels for the matched users
 		u1.send = u2.receive // Set up the send channel for user 1
@@ -69,9 +83,12 @@ func (m *Matchmaker) Enqueue(u *User) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Add the user to the queue
-	m.queue = append(m.queue, *u)
+	// Add the user to the queue (store pointer to maintain channel references)
+	m.queue = append(m.queue, u)
 
 	// Signal that a new user has been added
-	m.added <- struct{}{}
+	select {
+	case m.added <- struct{}{}:
+	default: // Don't block if channel is full
+	}
 }
