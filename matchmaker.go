@@ -6,23 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type ChatMsgType int
-
-const (
-	ChatMsgTypeMessage ChatMsgType = iota
-	ChatMsgTypeJoin
-	ChatMsgTypeLeave
-	ChatMsgTypeError
-)
-
-type ChatMsg struct {
-	Type    ChatMsgType // Type of message (e.g., message, join, leave, error)
-	Content string      // Content of the message
-}
-
-// chatMsgReceived is a custom type to handle received chat messages in tea
-type chatMsgReceived ChatMsg
-
 type User struct {
 	receive chan ChatMsg // Channel to receive messages
 	send    chan ChatMsg // Channel to send messages
