@@ -27,6 +27,10 @@ lint:
 run: build
 	./$(BINARY_PATH)
 
+# Development mode with auto-restart on file changes
+dev:
+	./scripts/dev.sh
+
 # Clean build artifacts
 clean:
 	rm -rf bin/
@@ -53,6 +57,7 @@ help:
 	@echo "  fmt        - Format the Go source code"
 	@echo "  lint       - Lint the Go source code (requires golangci-lint)"
 	@echo "  run        - Build and run the application"
+	@echo "  dev        - Run in development mode with auto-restart on file changes"
 	@echo "  clean      - Remove build artifacts"
 	@echo "  deps       - Download and tidy dependencies"
 	@echo "  test       - Run tests"
@@ -60,4 +65,4 @@ help:
 	@echo "  help       - Show this help message"
 
 # Declare phony targets
-.PHONY: build fmt lint run clean deps test build-all help
+.PHONY: build fmt lint run dev clean deps test build-all help
