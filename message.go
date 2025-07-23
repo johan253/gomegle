@@ -1,12 +1,13 @@
 package main
 
+// Enum for chat message types
 type ChatMsgType int
 
 const (
-	ChatMsgTypeMessage ChatMsgType = iota
-	ChatMsgTypeJoin
-	ChatMsgTypeLeave
-	ChatMsgTypeError
+	ChatMsgTypeMessage ChatMsgType = iota // Regular message from a user
+	ChatMsgTypeJoin                       // User has been matched with another user
+	ChatMsgTypeLeave                      // User has left the chat
+	ChatMsgTypeError                      // Error message
 )
 
 type ChatMsg struct {

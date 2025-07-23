@@ -1,22 +1,6 @@
 package main
 
-import (
-	"sync"
-
-	tea "github.com/charmbracelet/bubbletea"
-)
-
-type User struct {
-	receive chan ChatMsg // Channel to receive messages
-	send    chan ChatMsg // Channel to send messages
-}
-
-func (u *User) ListenForMessages() tea.Cmd {
-	return func() tea.Msg {
-		msg := <-u.receive // Blocking call to wait for a message
-		return chatMsgReceived(msg)
-	}
-}
+import "sync"
 
 type Matchmaker struct {
 	queue []*User       // Queue of users waiting to be matched
@@ -34,6 +18,7 @@ func NewMatchMaker() *Matchmaker {
 	return m
 }
 
+// matchUsers continuously checks the queue for users to match.
 func (m *Matchmaker) matchUsers() {
 	for {
 		m.mu.Lock()
@@ -62,6 +47,7 @@ func (m *Matchmaker) matchUsers() {
 	}
 }
 
+// Adds a user to the matchmaker queue
 func (m *Matchmaker) Enqueue(u *User) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
