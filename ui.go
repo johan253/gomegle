@@ -17,6 +17,7 @@ import (
 
 // Constants and styles used for splash screen rendering and styling.
 const splashMessage = "Welcome to GoMegle"
+const welcomeMessage = "Welcome to GoMegle!\nSend '\\h' at any time to open help menu.\nLooking for someone to chat with..."
 
 var (
 	gap         = "\n\n" // Space between components
@@ -67,7 +68,7 @@ func initialModel(s ssh.Session) model {
 
 	// Setup chat display
 	vp := viewport.New(30, 5)
-	vp.SetContent("Welcome to GoMegle!\nLooking for someone to chat with...")
+	// vp.SetContent("Welcome to GoMegle!\nLooking for someone to chat with...")
 
 	// Splash screen timer and spinner
 	timer := timer.NewWithInterval(2*time.Second, 30*time.Millisecond)
@@ -83,7 +84,7 @@ func initialModel(s ssh.Session) model {
 	}
 
 	// Add user to matchmaker queue
-	globalMatchmaker.Enqueue(user)
+	// globalMatchmaker.Enqueue(user)
 
 	return model{
 		width:           30,
@@ -94,7 +95,7 @@ func initialModel(s ssh.Session) model {
 		splashTextIndex: 0,
 		splashSpinner:   ss,
 		textarea:        ta,
-		messages:        []string{},
+		messages:        []string{welcomeMessage},
 		viewport:        vp,
 		senderStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 		user:            user,
@@ -127,7 +128,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
 	switch msg := msg.(type) {
-
+	case timer.TimeoutMsg:
+		// Enqueue the user after the splash screen times out
+		if !m.matched {
+			globalMatchmaker.Enqueue(m.user)
+		}
 	case tea.WindowSizeMsg:
 		// Adjust dimensions to fit the terminal
 		m.width = msg.Width
