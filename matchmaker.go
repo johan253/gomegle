@@ -92,3 +92,20 @@ func (m *Matchmaker) Enqueue(u *User) {
 	default: // Don't block if channel is full
 	}
 }
+
+// Dequeue removes a user from the queue and closes their send channel. If the user is
+// not found, this function is a no-op.
+func (m *Matchmaker) Dequeue(u *User) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Find the user in the queue and remove them
+	for i, user := range m.queue {
+		if user == u {
+			// Close the send channel to signal that the user has left
+			close(user.send)
+			m.queue = append(m.queue[:i], m.queue[i+1:]...) // Remove user from queue
+			return
+		}
+	}
+}
