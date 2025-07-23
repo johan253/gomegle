@@ -146,6 +146,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// If the user is in the queue, remove them and close thier channel
 			if !m.matched {
 				globalMatchmaker.Dequeue(m.user)
+			} else {
+				// If matched, send leave message
+				leaveMsg := ChatMsg{
+					Type:    ChatMsgTypeLeave,
+					Content: "Stranger has left the chat.",
+				}
+				m.user.send <- leaveMsg
 			}
 			close(m.user.receive)
 			// Exit the program
@@ -180,14 +187,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case ChatMsgTypeJoin:
 			m.matched = true
-			m.messages = append(m.messages, "🎉 "+msg.Content)
+			m.messages = append(m.messages, "✅ "+msg.Content)
 		case ChatMsgTypeMessage:
 			m.messages = append(m.messages, "Stranger: "+msg.Content)
 		case ChatMsgTypeLeave:
 			m.matched = false
-			m.messages = append(m.messages, "💔 "+msg.Content)
-		case ChatMsgTypeError:
 			m.messages = append(m.messages, "❌ "+msg.Content)
+		case ChatMsgTypeError:
+			m.messages = append(m.messages, "🚨 "+msg.Content)
 		}
 
 		// Update viewport and scroll to bottom
