@@ -19,6 +19,17 @@ import (
 const splashMessage = "Welcome to GoMegle"
 const welcomeMessage = "Welcome to GoMegle!\nSend '\\h' at any time to open help menu.\nLooking for someone to chat with..."
 
+// TODO: Implement auto-requeue
+// TODO: Implement "\q" to disconnect from current chat
+const helpText = `
+\h     - Show this help menu
+\q     - Disconnect from current chat [COMING SOON]
+\r     - Toggle auto-requeue for a new chat (or 'r' for requeue) [COMING SOON]
+
+q      - Exit this help menu
+ctrl+c - Exit the app at any time
+`
+
 var (
 	gap         = "\n\n" // Space between components
 	splashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
@@ -44,6 +55,7 @@ type model struct {
 	user            *User              // User channels for sending/receiving
 	matched         bool               // Whether user has been matched
 	promptRequeue   bool               // Whether to prompt user to requeue after getting unmatched
+	helpMenu        bool               // Whether to show help menu
 }
 
 // teaHandler wires a Bubble Tea model to a new SSH session.
@@ -101,6 +113,7 @@ func initialModel(s ssh.Session) model {
 		user:            user,
 		matched:         false,
 		promptRequeue:   false, // Initially not prompting for requeue
+		helpMenu:        false, // Initially not showing help menu
 	}
 }
 
@@ -166,7 +179,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			// Send message if matched and textarea has content
-			if m.matched && m.user.send != nil && m.textarea.Value() != "" {
+			if m.textarea.Value() == "\\h" {
+				m.helpMenu = true
+			} else if m.matched && m.user.send != nil && m.textarea.Value() != "" {
 				chatMsg := ChatMsg{
 					Type:    ChatMsgTypeMessage,
 					Content: m.textarea.Value(),
@@ -192,6 +207,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
+		case "q":
+			// Hide help menu
+			if m.helpMenu {
+				m.helpMenu = false
+				m.textarea.Reset()
+			}
 		}
 
 	case chatMsgReceived:
@@ -246,6 +267,9 @@ func (m model) View() string {
 	if !m.splashTimer.Timedout() {
 		return splashView(m)
 	}
+	if m.helpMenu {
+		return helpView(m)
+	}
 
 	// Show connection status in the input placeholder
 	if m.matched {
@@ -268,4 +292,13 @@ func splashView(m model) string {
 		lipgloss.Center, lipgloss.Center,
 		fmt.Sprintf("%s %s", m.splashText, splashStyle.Render(spinnerText)),
 	)
+}
+
+func helpView(m model) string {
+	return m.renderer.NewStyle().
+		Padding(1, 1).
+		Width(m.width).
+		Height(m.height).
+		Align(lipgloss.Left, lipgloss.Center).
+		Render(helpText)
 }
