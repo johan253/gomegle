@@ -8,6 +8,7 @@ type Matchmaker struct {
 	added chan struct{} // Channel to signal a new user has been added
 }
 
+// NewMatchMaker initializes a new Matchmaker instance and begins matching users.
 func NewMatchMaker() *Matchmaker {
 	m := &Matchmaker{
 		queue: make([]*User, 0),

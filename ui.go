@@ -236,7 +236,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(taCmd, tiCmd, vpCmd, ssCmd)
 }
 
-// View renders the entire UI depending on splash state.
+// View renders the entire UI depending on model state.
 func (m model) View() string {
 	if !m.splashTimer.Timedout() {
 		return splashView(m)
