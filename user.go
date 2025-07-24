@@ -1,9 +1,12 @@
 package main
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 // User represents a user in the matchmaker system
 type User struct {
+	pubKey  string       // Public key of the user
 	receive chan ChatMsg // Channel to receive messages
 	send    chan ChatMsg // Channel to send messages
 }

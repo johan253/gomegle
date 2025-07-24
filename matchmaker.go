@@ -1,19 +1,23 @@
 package main
 
-import "sync"
+import (
+	"sync"
+)
 
 type Matchmaker struct {
-	queue []*User       // Queue of users waiting to be matched
-	mu    sync.Mutex    // Mutex to protect access to the queue
-	added chan struct{} // Channel to signal a new user has been added
+	userSet map[string]struct{} // Set of users currently in the matchmaker
+	queue   []*User             // Queue of users waiting to be matched
+	mu      sync.Mutex          // Mutex to protect access to the queue
+	added   chan struct{}       // Channel to signal a new user has been added
 }
 
 // NewMatchMaker initializes a new Matchmaker instance and begins matching users.
 func NewMatchMaker() *Matchmaker {
 	m := &Matchmaker{
-		queue: make([]*User, 0),
-		mu:    sync.Mutex{},
-		added: make(chan struct{}, 1000), // Buffered channel to avoid blocking
+		userSet: make(map[string]struct{}), // Initialize user set
+		queue:   make([]*User, 0),
+		mu:      sync.Mutex{},
+		added:   make(chan struct{}, 1000), // Buffered channel to avoid blocking
 	}
 	go m.matchUsers()
 	return m
@@ -48,13 +52,14 @@ func (m *Matchmaker) matchUsers() {
 	}
 }
 
-// Adds a user to the matchmaker queue
+// Enqueue adds a user to the matchmaker queue
 func (m *Matchmaker) Enqueue(u *User) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Add the user to the queue (store pointer to maintain channel references)
 	m.queue = append(m.queue, u)
+	m.userSet[u.pubKey] = struct{}{} // Add user to the set
 
 	// Signal that a new user has been added
 	select {
@@ -74,7 +79,18 @@ func (m *Matchmaker) Dequeue(u *User) {
 		if user == u {
 			// Close the send channel to signal that the user has left
 			m.queue = append(m.queue[:i], m.queue[i+1:]...) // Remove user from queue
+			delete(m.userSet, u.pubKey)                     // Remove user from set
 			return
 		}
 	}
+}
+
+// HasUser checks if a user with the given public key is currently in the matchmaker.
+func (m *Matchmaker) HasUser(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if the user is in the matchmaker set
+	_, exists := m.userSet[key]
+	return exists
 }

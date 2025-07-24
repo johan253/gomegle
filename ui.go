@@ -13,11 +13,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish/bubbletea"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 // Constants and styles used for splash screen rendering and styling.
-const splashMessage = "Welcome to GoMegle"
-const welcomeMessage = "Welcome to GoMegle!\nSend '\\h' at any time to open help menu.\nLooking for someone to chat with..."
+const (
+	splashMessage  = "Welcome to GoMegle"
+	welcomeMessage = "Welcome to GoMegle!\nSend '\\h' at any time to open help menu.\nLooking for someone to chat with..."
+)
 
 // TODO: Implement auto-requeue
 // TODO: Implement "\q" to disconnect from current chat
@@ -89,8 +92,11 @@ func initialModel(s ssh.Session) model {
 	ss := spinner.New()
 	ss.Spinner = spinner.Points
 
+	pk := string(gossh.MarshalAuthorizedKey(s.PublicKey()))
+
 	// Create user with channels and add to matchmaker
 	user := &User{
+		pubKey:  pk,
 		receive: make(chan ChatMsg, 100), // Buffered to prevent blocking
 		send:    nil,                     // Will be set when matched
 	}

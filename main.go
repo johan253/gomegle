@@ -18,6 +18,8 @@ import (
 	"github.com/charmbracelet/wish/activeterm"
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
+	"github.com/joho/godotenv"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 const (
@@ -27,15 +29,25 @@ const (
 	shutdownTime = 30 * time.Second
 )
 
-var globalMatchmaker *Matchmaker
+var (
+	globalMatchmaker *Matchmaker
+	isDev            bool
+)
 
 func main() {
+	godotenv.Load()
 	// Initialize global matchmaker
 	globalMatchmaker = NewMatchMaker()
+	isDev = os.Getenv("ENVIRONMENT") == "development"
 
 	s, err := wish.NewServer(
 		wish.WithAddress(net.JoinHostPort(host, port)),
 		wish.WithHostKeyPath(hostKeyPath),
+		wish.WithPublicKeyAuth(func(_ ssh.Context, key ssh.PublicKey) bool {
+			// Check if the user is already in the matchmaker
+			parsedKey := string(gossh.MarshalAuthorizedKey(key))
+			return isDev || !globalMatchmaker.HasUser(parsedKey)
+		}),
 		wish.WithMiddleware(
 			bubbletea.Middleware(teaHandler),
 			activeterm.Middleware(), // Bubble Tea apps usually require a PTY.
@@ -48,7 +60,7 @@ func main() {
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	log.Info("Starting SSH server", "host", host, "port", port)
+	log.Info("Starting SSH server", "host", host, "port", port, "dev", isDev)
 	go func() {
 		if err = s.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 			log.Error("Could not start server", "error", err)
