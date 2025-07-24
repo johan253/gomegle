@@ -35,7 +35,9 @@ var (
 )
 
 func main() {
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Warn("Could not load .env file", "error", err)
+	}
 	// Initialize global matchmaker
 	globalMatchmaker = NewMatchMaker()
 	isDev = os.Getenv("ENVIRONMENT") == "development"
