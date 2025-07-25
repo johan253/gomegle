@@ -23,11 +23,11 @@ const (
 )
 
 // TODO: Implement auto-requeue
-// TODO: Implement "\q" to disconnect from current chat
 const helpText = `
 \h     - Show this help menu
-\q     - Disconnect from current chat [COMING SOON]
-\r     - Toggle auto-requeue for a new chat (or 'r' for requeue) [COMING SOON]
+\q     - Disconnect from current chat
+\r     - Requeue for a new chat
+\a 	   - Toggle auto-requeue [COMING SOON]
 
 q      - Exit this help menu
 ctrl+c - Exit the app at any time
@@ -205,7 +205,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.matched = false
 			m.promptRequeue = true
 			m.messages = append(m.messages, "❌ "+msg.Content)
-			m.messages = append(m.messages, "Send 'r' to requeue or press 'ctrl+c' to exit.")
+			m.messages = append(m.messages, "Send '\\r' to requeue or press 'ctrl+c' to exit.")
 		case ChatMsgTypeError:
 			m.messages = append(m.messages, "🚨 "+msg.Content)
 		}
@@ -267,14 +267,22 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 		case StateChatMatched:
 			switch key {
 			case "enter":
-				switch m.textarea.Value() {
+				switch strings.TrimSpace(m.textarea.Value()) {
+				case "":
 				case "\\h":
 					m.uiState = StateUIHelp
-				case "\\q": // TODO: Implement disconnect from current chat
+				case "\\q":
+					leaveMsg := ChatMsg{
+						Type:    ChatMsgTypeLeave,
+						Content: "Stranger has left the chat.",
+					}
+					m.user.send <- leaveMsg
+					m.chatState = StateChatDisconnected
+					m.messages = append(m.messages, "You have left the chat. Send '\\r' to requeue or press 'ctrl+c' to exit.")
 				default:
 					chatMsg := ChatMsg{
 						Type:    ChatMsgTypeMessage,
-						Content: m.textarea.Value(),
+						Content: strings.TrimSpace(m.textarea.Value()),
 					}
 					// Send message to other user (non-blocking)
 					select {
@@ -294,10 +302,10 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 				switch m.textarea.Value() {
 				case "\\h":
 					m.uiState = StateUIHelp
-				case "r":
+				case "\\r":
 					globalMatchmaker.Enqueue(m.user)
 					m.chatState = StateChatQueued
-					m.messages = append(m.messages, "Requeued! Waiting for a new match...")
+					m.messages = append(m.messages, "Requeued! Send '\\q' to exit queue. Waiting for a new match...")
 				}
 			}
 		// Not matched, but in queue
@@ -310,7 +318,7 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 				case "\\q":
 					globalMatchmaker.Dequeue(m.user)
 					m.chatState = StateChatDisconnected
-					m.messages = append(m.messages, "You have left the queue. Send 'r' to requeue or press 'ctrl+c' to exit.")
+					m.messages = append(m.messages, "You have left the queue. Send '\\r' to requeue or press 'ctrl+c' to exit.")
 				}
 			}
 		}
