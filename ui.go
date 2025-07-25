@@ -41,6 +41,22 @@ var (
 // errMsg is used to encapsulate error messages into Bubble Tea Msgs.
 type errMsg error
 
+type UIState int
+
+const (
+	StateUIMenu UIState = iota
+	StateUIChat
+	StateUIHelp
+)
+
+type ChatState int
+
+const (
+	StateChatMatched ChatState = iota
+	StateChatQueued
+	StateChatDisconnected
+)
+
 // model defines the state of the Bubble Tea TUI application.
 type model struct {
 	width           int                // Terminal width
@@ -59,6 +75,8 @@ type model struct {
 	matched         bool               // Whether user has been matched
 	promptRequeue   bool               // Whether to prompt user to requeue after getting unmatched
 	helpMenu        bool               // Whether to show help menu
+	uiState         UIState            // Current state of the UI
+	chatState       ChatState          // Current state of the chat
 }
 
 // teaHandler wires a Bubble Tea model to a new SSH session.
@@ -120,6 +138,8 @@ func initialModel(s ssh.Session) model {
 		matched:         false,
 		promptRequeue:   false, // Initially not prompting for requeue
 		helpMenu:        false, // Initially not showing help menu
+		uiState:         StateUIMenu,
+		chatState:       StateChatDisconnected,
 	}
 }
 
@@ -148,9 +168,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case timer.TimeoutMsg:
+		m.uiState = StateUIChat
 		// Enqueue the user after the splash screen times out
-		if !m.matched {
+		if m.chatState != StateChatMatched {
 			globalMatchmaker.Enqueue(m.user)
+			m.chatState = StateChatQueued
 		}
 	case tea.WindowSizeMsg:
 		// Adjust dimensions to fit the terminal
@@ -167,70 +189,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
-			// If the user is in the queue, remove them and close thier channel
-			if !m.matched {
-				globalMatchmaker.Dequeue(m.user)
-			} else {
-				// If matched, send leave message
-				leaveMsg := ChatMsg{
-					Type:    ChatMsgTypeLeave,
-					Content: "Stranger has left the chat.",
-				}
-				m.user.send <- leaveMsg
-			}
-			close(m.user.receive)
-			// Exit the program
-			return m, tea.Quit
-		case "enter":
-			// Send message if matched and textarea has content
-			if m.textarea.Value() == "\\h" {
-				m.helpMenu = true
-			} else if m.matched && m.user.send != nil && m.textarea.Value() != "" {
-				chatMsg := ChatMsg{
-					Type:    ChatMsgTypeMessage,
-					Content: m.textarea.Value(),
-				}
-
-				// Send message to other user (non-blocking)
-				select {
-				case m.user.send <- chatMsg:
-					// Message sent successfully, add to our view
-					m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
-				default:
-					// Channel is full or closed, show error
-					m.messages = append(m.messages, "Error: Could not send message")
-
-				}
-			} else if m.promptRequeue && m.textarea.Value() == "r" {
-				// If prompted to requeue, re-add user to matchmaker
-				globalMatchmaker.Enqueue(m.user)
-				m.promptRequeue = false
-				m.messages = append(m.messages, "Requeued! Waiting for a new match...")
-
-			}
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
-			m.viewport.GotoBottom()
-			m.textarea.Reset()
-		case "q":
-			// Hide help menu
-			if m.helpMenu {
-				m.helpMenu = false
-				m.textarea.Reset()
-			}
-		}
-
+		return m.handleKeyMsg(msg)
 	case chatMsgReceived:
 		// Handle received messages from other users
 		switch msg.Type {
 		case ChatMsgTypeJoin:
+			m.chatState = StateChatMatched
 			m.matched = true
 			m.promptRequeue = false
 			m.messages = append(m.messages, "✅ "+msg.Content)
 		case ChatMsgTypeMessage:
 			m.messages = append(m.messages, "Stranger: "+msg.Content)
 		case ChatMsgTypeLeave:
+			m.chatState = StateChatDisconnected
 			m.matched = false
 			m.promptRequeue = true
 			m.messages = append(m.messages, "❌ "+msg.Content)
@@ -268,17 +239,110 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(taCmd, tiCmd, vpCmd, ssCmd)
 }
 
+func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
+	key := msg.String()
+	// global keybind ctrl+c to exit
+	if key == "ctrl+c" {
+		// If the user is in the queue, remove them and close thier channel
+		if !m.matched {
+			globalMatchmaker.Dequeue(m.user)
+		} else {
+			// If matched, send leave message
+			leaveMsg := ChatMsg{
+				Type:    ChatMsgTypeLeave,
+				Content: "Stranger has left the chat.",
+			}
+			m.user.send <- leaveMsg
+		}
+		close(m.user.receive)
+		// Exit the program
+		return m, tea.Quit
+	}
+	// Handle key messages based on current state
+	switch m.uiState {
+	// In the chat UI
+	case StateUIChat:
+		switch m.chatState {
+		// Currently matched with another user
+		case StateChatMatched:
+			switch key {
+			case "enter":
+				switch m.textarea.Value() {
+				case "\\h":
+					m.uiState = StateUIHelp
+				case "\\q": // TODO: Implement disconnect from current chat
+				default:
+					chatMsg := ChatMsg{
+						Type:    ChatMsgTypeMessage,
+						Content: m.textarea.Value(),
+					}
+					// Send message to other user (non-blocking)
+					select {
+					case m.user.send <- chatMsg:
+						// Message sent successfully, add to our view
+						m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
+					default:
+						// Channel is full or closed, show error
+						m.messages = append(m.messages, "Error: Could not send message")
+					}
+				}
+			}
+		// Not matched, and not in queue
+		case StateChatDisconnected:
+			switch key {
+			case "enter":
+				switch m.textarea.Value() {
+				case "\\h":
+					m.uiState = StateUIHelp
+				case "r":
+					globalMatchmaker.Enqueue(m.user)
+					m.chatState = StateChatQueued
+					m.messages = append(m.messages, "Requeued! Waiting for a new match...")
+				}
+			}
+		// Not matched, but in queue
+		case StateChatQueued:
+			switch key {
+			case "enter":
+				switch m.textarea.Value() {
+				case "\\h":
+					m.uiState = StateUIHelp
+				case "\\q":
+					globalMatchmaker.Dequeue(m.user)
+					m.chatState = StateChatDisconnected
+					m.messages = append(m.messages, "You have left the queue. Send 'r' to requeue or press 'ctrl+c' to exit.")
+				}
+			}
+		}
+	// In the menu UI
+	case StateUIMenu:
+	// In the help UI
+	case StateUIHelp:
+		if key == "q" {
+			m.uiState = StateUIChat
+			m.textarea.Reset() // Reset textarea when exiting help
+		}
+	}
+	// global keybinds below, after handling state-specific keybinds
+	if key == "enter" {
+		m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+		m.viewport.GotoBottom()
+		m.textarea.Reset()
+	}
+	return m, nil
+}
+
 // View renders the entire UI depending on model state.
 func (m model) View() string {
 	if !m.splashTimer.Timedout() {
 		return splashView(m)
 	}
-	if m.helpMenu {
+	if m.uiState == StateUIHelp {
 		return helpView(m)
 	}
 
 	// Show connection status in the input placeholder
-	if m.matched {
+	if m.chatState == StateChatMatched {
 		m.textarea.Placeholder = "Type your message..."
 	} else {
 		m.textarea.Placeholder = "Waiting for match..."
