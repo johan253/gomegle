@@ -70,6 +70,7 @@ type model struct {
 	messages        []string           // All messages displayed
 	textarea        textarea.Model     // Input field for user to type messages
 	senderStyle     lipgloss.Style     // Style for user's message prefix
+	receiverStyle   lipgloss.Style     // Style for stranger's message prefix
 	err             error              // Captured errors
 	user            *User              // User channels for sending/receiving
 	uiState         UIState            // Current state of the UI
@@ -132,6 +133,7 @@ func initialModel(s ssh.Session) model {
 		messages:        []string{welcomeMessage},
 		viewport:        vp,
 		senderStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		receiverStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
 		user:            user,
 		uiState:         StateUIMenu,
 		chatState:       StateChatDisconnected,
@@ -193,7 +195,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatState = StateChatMatched
 			m.messages = append(m.messages, "✅ "+msg.Content)
 		case ChatMsgTypeMessage:
-			m.messages = append(m.messages, "Stranger: "+msg.Content)
+			m.messages = append(m.messages, m.receiverStyle.Render("Stranger: ")+msg.Content)
 		case ChatMsgTypeLeave:
 			m.chatState = StateChatDisconnected
 			m.messages = append(m.messages, "❌ "+msg.Content)
@@ -277,7 +279,7 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 				case StateChatDisconnected:
 					status = "disconnected!"
 				}
-				m.messages = []string{"Chat Cleared! Currently " + status}
+				m.messages = []string{"Chat Cleared. Currently " + status}
 			case "\\r":
 				switch m.chatState {
 				case StateChatDisconnected:
