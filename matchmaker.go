@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -17,8 +16,17 @@ func NewMatchmaker() *Matchmaker {
 	return m
 }
 
-func acquireLock() (bool, error) {
-	return rdb.SetNX(ctx, lockKey, "locked", 5*time.Second).Result()
+func acquireLock() {
+	for {
+		ok, err := rdb.SetNX(ctx, lockKey, "locked", 5*time.Second).Result()
+		if err != nil {
+			panic(err) // Handle error appropriately in production code
+		}
+		if ok {
+			return // Lock acquired successfully
+		}
+		time.Sleep(100 * time.Millisecond) // Wait before retrying to acquire the lock
+	}
 }
 
 func releaseLock() {
@@ -29,46 +37,33 @@ func releaseLock() {
 func (m *Matchmaker) matchmakingLoop() {
 	pubsub := rdb.Subscribe(ctx, "user_joined")
 	ch := pubsub.Channel()
-	for range ch {
-		lockAquired, _ := acquireLock()
-		if !lockAquired {
-			continue // Skip if lock could not be acquired
-		}
-		// Match the first two users in the queue
-		go m.tryMatchUsers()
-	}
-	err := pubsub.Close()
-	if err != nil {
-		fmt.Printf("Error closing pubsub: %v\n", err)
-	}
-}
-
-func (m *Matchmaker) tryMatchUsers() {
+	defer pubsub.Close()
+	acquireLock()
 	defer releaseLock()
+	for {
+		for rdb.LLen(ctx, "queue").Val() < 2 {
+			releaseLock()
+			<-ch
+			acquireLock()
+		}
+		u1, _ := rdb.LPop(ctx, "queue").Result()
+		u2, _ := rdb.LPop(ctx, "queue").Result()
 
-	length, _ := rdb.LLen(ctx, "queue").Result()
-	if length < 2 {
-		return
+		joinMsg1 := ChatMsg{
+			Type:    ChatMsgTypeJoin,
+			Content: u2,
+		}
+		joinMsg2 := ChatMsg{
+			Type:    ChatMsgTypeJoin,
+			Content: u1,
+		}
+		data, _ := json.Marshal(joinMsg1)
+		rdb.Publish(ctx, "user:"+u1, data)
+		data, _ = json.Marshal(joinMsg2)
+		rdb.Publish(ctx, "user:"+u2, data)
+
+		rdb.SRem(ctx, "users", u1, u2) // Remove users from the active set
 	}
-	fmt.Printf("Matching users...\n")
-
-	u1, _ := rdb.LPop(ctx, "queue").Result()
-	u2, _ := rdb.LPop(ctx, "queue").Result()
-
-	joinMsg1 := ChatMsg{
-		Type:    ChatMsgTypeJoin,
-		Content: u2,
-	}
-	joinMsg2 := ChatMsg{
-		Type:    ChatMsgTypeJoin,
-		Content: u1,
-	}
-	data, _ := json.Marshal(joinMsg1)
-	rdb.Publish(ctx, "user:"+u1, data)
-	data, _ = json.Marshal(joinMsg2)
-	rdb.Publish(ctx, "user:"+u2, data)
-
-	rdb.SRem(ctx, "users", u1, u2) // Remove users from the active set
 }
 
 // Enqueue adds a user to the matchmaker queue
