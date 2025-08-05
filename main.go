@@ -39,7 +39,7 @@ func main() {
 		log.Warn("Could not load .env file", "error", err)
 	}
 	// Initialize global matchmaker
-	globalMatchmaker = NewMatchMaker()
+	globalMatchmaker = NewMatchmaker()
 	isDev = os.Getenv("ENVIRONMENT") == "development"
 
 	s, err := wish.NewServer(
@@ -48,7 +48,12 @@ func main() {
 		wish.WithPublicKeyAuth(func(_ ssh.Context, key ssh.PublicKey) bool {
 			// Check if the user is already in the matchmaker
 			parsedKey := string(gossh.MarshalAuthorizedKey(key))
-			return isDev || !globalMatchmaker.HasUser(parsedKey)
+			hasUser, err := globalMatchmaker.HasUser(parsedKey)
+			if err != nil {
+				log.Error("Error checking user in matchmaker", "error", err)
+				return false
+			}
+			return isDev || !hasUser
 		}),
 		wish.WithMiddleware(
 			bubbletea.Middleware(teaHandler),

@@ -112,10 +112,12 @@ func initialModel(s ssh.Session) model {
 	pk := string(gossh.MarshalAuthorizedKey(s.PublicKey()))
 
 	// Create user with channels and add to matchmaker
+	pubsub := rdb.Subscribe(ctx, "user:"+pk)
+	ch := pubsub.Channel()
 	user := &User{
 		pubKey:  pk,
-		receive: make(chan ChatMsg, 100), // Buffered to prevent blocking
-		send:    nil,                     // Will be set when matched
+		pubsub:  pubsub,
+		receive: ch, // Buffered to prevent blocking
 	}
 
 	// Add user to matchmaker queue
@@ -169,8 +171,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.uiState = StateUIChat
 		// Enqueue the user after the splash screen times out
 		if m.chatState != StateChatMatched {
-			globalMatchmaker.Enqueue(m.user)
-			m.chatState = StateChatQueued
+			if err := globalMatchmaker.Enqueue(m.user); err == nil {
+				m.chatState = StateChatQueued
+			} else {
+				m.chatState = StateChatDisconnected
+				m.messages = append(m.messages, "Error: Could not enqueue. Try again later.")
+			}
 		}
 	case tea.WindowSizeMsg:
 		// Adjust dimensions to fit the terminal
@@ -193,16 +199,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case ChatMsgTypeJoin:
 			m.chatState = StateChatMatched
-			m.messages = append(m.messages, "✅ "+msg.Content)
+			m.user.send = msg.Content // Set the other user's public key
+			m.messages = append(m.messages, "✅ You matched with a stranger, say hello!")
 		case ChatMsgTypeMessage:
 			m.messages = append(m.messages, m.receiverStyle.Render("Stranger: ")+msg.Content)
 		case ChatMsgTypeLeave:
 			m.chatState = StateChatDisconnected
+			m.user.send = "" // Clear send channel
 			m.messages = append(m.messages, "❌ "+msg.Content)
 			if m.autoRequeue {
-				globalMatchmaker.Enqueue(m.user)
-				m.chatState = StateChatQueued
-				m.messages = append(m.messages, "Auto-requeue enabled! Waiting for a new match...")
+				if err := globalMatchmaker.Enqueue(m.user); err == nil {
+					m.chatState = StateChatQueued
+					m.messages = append(m.messages, "Auto-requeue enabled! Waiting for a new match...")
+				} else {
+					m.messages = append(m.messages, "Error: Could not auto-requeue. Try again later.")
+				}
 			} else {
 				m.messages = append(m.messages, "Send '\\r' to requeue or press 'ctrl+c' to exit.")
 			}
@@ -245,16 +256,18 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 	if key == "ctrl+c" {
 		// If the user is in the queue, remove them and close thier channel
 		if m.chatState == StateChatQueued {
-			globalMatchmaker.Dequeue(m.user)
+			if err := globalMatchmaker.Dequeue(m.user); err != nil {
+				fmt.Printf("Error dequeuing user: %v\n", err)
+			}
 		} else {
 			// If matched, send leave message
-			leaveMsg := ChatMsg{
-				Type:    ChatMsgTypeLeave,
-				Content: "Stranger has left the chat.",
+			if err := m.user.LeaveChat(); err != nil {
+				fmt.Printf("Error leaving chat: %v\n", err)
 			}
-			m.user.send <- leaveMsg
 		}
-		close(m.user.receive)
+		if err := m.user.pubsub.Close(); err != nil { // Close the user's pubsub channel
+			fmt.Printf("Error closing pubsub: %v\n", err)
+		}
 		// Exit the program
 		return m, tea.Quit
 	}
@@ -283,9 +296,12 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 			case "\\r":
 				switch m.chatState {
 				case StateChatDisconnected:
-					globalMatchmaker.Enqueue(m.user)
-					m.chatState = StateChatQueued
-					m.messages = append(m.messages, "Re-queued! send '\\q' to exit queue or 'ctrl+c' to quit.")
+					if err := globalMatchmaker.Enqueue(m.user); err == nil {
+						m.chatState = StateChatQueued
+						m.messages = append(m.messages, "Re-queued! send '\\q' to exit queue or 'ctrl+c' to quit.")
+					} else {
+						m.messages = append(m.messages, "Error: Could not re-queue. Try again later.")
+					}
 				}
 			case "\\a":
 				m.autoRequeue = !m.autoRequeue
@@ -299,17 +315,19 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 			case "\\q":
 				switch m.chatState {
 				case StateChatMatched:
-					leaveMsg := ChatMsg{
-						Type:    ChatMsgTypeLeave,
-						Content: "Stranger has left the chat.",
+					if err := m.user.LeaveChat(); err == nil {
+						m.chatState = StateChatDisconnected
+						m.messages = append(m.messages, "You have left the chat. Send '\\r' to requeue or press 'ctrl+c' to exit.")
+					} else {
+						m.messages = append(m.messages, "Error: Could not leave chat. Try again later.")
 					}
-					m.user.send <- leaveMsg
-					m.chatState = StateChatDisconnected
-					m.messages = append(m.messages, "You have left the chat. Send '\\r' to requeue or press 'ctrl+c' to exit.")
 				case StateChatQueued:
-					globalMatchmaker.Dequeue(m.user)
-					m.chatState = StateChatDisconnected
-					m.messages = append(m.messages, "You have left the queue. Send '\\r' to requeue or press 'ctrl+c' to exit.")
+					if err := globalMatchmaker.Dequeue(m.user); err == nil {
+						m.chatState = StateChatDisconnected
+						m.messages = append(m.messages, "You have left the queue. Send '\\r' to requeue or press 'ctrl+c' to exit.")
+					} else {
+						m.messages = append(m.messages, "Error: Could not leave queue. Try again later.")
+					}
 				}
 			default:
 				if m.chatState == StateChatMatched {
@@ -318,11 +336,10 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 						Content: strings.TrimSpace(m.textarea.Value()),
 					}
 					// Send message to other user (non-blocking)
-					select {
-					case m.user.send <- chatMsg:
+					if err := m.user.SendMessage(chatMsg); err == nil {
 						// Message sent successfully, add to our view
 						m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
-					default:
+					} else {
 						// Channel is full or closed, show error
 						m.messages = append(m.messages, "Error: Could not send message")
 					}

@@ -1,96 +1,97 @@
 package main
 
 import (
-	"sync"
+	"encoding/json"
+	"fmt"
+	"time"
 )
 
-type Matchmaker struct {
-	userSet map[string]struct{} // Set of users currently in the matchmaker
-	queue   []*User             // Queue of users waiting to be matched
-	mu      sync.Mutex          // Mutex to protect access to the queue
-	added   chan struct{}       // Channel to signal a new user has been added
-}
+const lockKey = "match_lock"
 
-// NewMatchMaker initializes a new Matchmaker instance and begins matching users.
-func NewMatchMaker() *Matchmaker {
-	m := &Matchmaker{
-		userSet: make(map[string]struct{}), // Initialize user set
-		queue:   make([]*User, 0),
-		mu:      sync.Mutex{},
-		added:   make(chan struct{}, 1000), // Buffered channel to avoid blocking
-	}
-	go m.matchUsers()
+type Matchmaker struct{}
+
+// NewMatchmaker initializes a new Matchmaker instance and begins matching users.
+func NewMatchmaker() *Matchmaker {
+	m := &Matchmaker{}
+	go m.matchmakingLoop()
 	return m
 }
 
+func acquireLock() (bool, error) {
+	return rdb.SetNX(ctx, lockKey, "locked", 5*time.Second).Result()
+}
+
+func releaseLock() {
+	rdb.Del(ctx, lockKey) // Release the lock by deleting the key
+}
+
 // matchUsers continuously checks the queue for users to match.
-func (m *Matchmaker) matchUsers() {
-	for {
-		m.mu.Lock()
-		for len(m.queue) < 2 {
-			m.mu.Unlock() // Unlock while waiting for a new user
-			<-m.added     // Wait for a new user to be added
-			m.mu.Lock()   // Lock again to access the queue
+func (m *Matchmaker) matchmakingLoop() {
+	pubsub := rdb.Subscribe(ctx, "user_joined")
+	ch := pubsub.Channel()
+	for range ch {
+		lockAquired, _ := acquireLock()
+		if !lockAquired {
+			continue // Skip if lock could not be acquired
 		}
 		// Match the first two users in the queue
-		u1 := m.queue[0]
-		u2 := m.queue[1]
-		m.queue = m.queue[2:] // Remove the matched users from the queue
-		m.mu.Unlock()
-
-		// Set up the channels for the matched users
-		u1.send = u2.receive // Set up the send channel for user 1
-		u2.send = u1.receive // Set up the send channel for user 2
-
-		// Notify both users that they have been matched
-		joinMsg := ChatMsg{
-			Type:    ChatMsgTypeJoin,
-			Content: "You have been matched with another user!",
-		}
-		u1.receive <- joinMsg
-		u2.receive <- joinMsg
+		go m.tryMatchUsers()
+	}
+	err := pubsub.Close()
+	if err != nil {
+		fmt.Printf("Error closing pubsub: %v\n", err)
 	}
 }
 
-// Enqueue adds a user to the matchmaker queue
-func (m *Matchmaker) Enqueue(u *User) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *Matchmaker) tryMatchUsers() {
+	defer releaseLock()
 
-	// Add the user to the queue (store pointer to maintain channel references)
-	m.queue = append(m.queue, u)
-	m.userSet[u.pubKey] = struct{}{} // Add user to the set
-
-	// Signal that a new user has been added
-	select {
-	case m.added <- struct{}{}:
-	default: // Don't block if channel is full
+	length, _ := rdb.LLen(ctx, "queue").Result()
+	if length < 2 {
+		return
 	}
+	fmt.Printf("Matching users...\n")
+
+	u1, _ := rdb.LPop(ctx, "queue").Result()
+	u2, _ := rdb.LPop(ctx, "queue").Result()
+
+	joinMsg1 := ChatMsg{
+		Type:    ChatMsgTypeJoin,
+		Content: u2,
+	}
+	joinMsg2 := ChatMsg{
+		Type:    ChatMsgTypeJoin,
+		Content: u1,
+	}
+	data, _ := json.Marshal(joinMsg1)
+	rdb.Publish(ctx, "user:"+u1, data)
+	data, _ = json.Marshal(joinMsg2)
+	rdb.Publish(ctx, "user:"+u2, data)
+
+	rdb.SRem(ctx, "users", u1, u2) // Remove users from the active set
+}
+
+// Enqueue adds a user to the matchmaker queue
+func (m *Matchmaker) Enqueue(u *User) error {
+	pipe := rdb.TxPipeline()
+	pipe.RPush(ctx, "queue", u.pubKey)
+	pipe.SAdd(ctx, "users", u.pubKey)
+	pipe.Publish(ctx, "user_joined", "")
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // Dequeue removes a user from the queue and closes their send channel. If the user is
 // not found, this function is a no-op.
-func (m *Matchmaker) Dequeue(u *User) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Find the user in the queue and remove them
-	for i, user := range m.queue {
-		if user == u {
-			// Close the send channel to signal that the user has left
-			m.queue = append(m.queue[:i], m.queue[i+1:]...) // Remove user from queue
-			delete(m.userSet, u.pubKey)                     // Remove user from set
-			return
-		}
-	}
+func (m *Matchmaker) Dequeue(u *User) error {
+	pipe := rdb.TxPipeline()
+	pipe.LRem(ctx, "queue", 0, u.pubKey)
+	pipe.SRem(ctx, "users", u.pubKey)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // HasUser checks if a user with the given public key is currently in the matchmaker.
-func (m *Matchmaker) HasUser(key string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Check if the user is in the matchmaker set
-	_, exists := m.userSet[key]
-	return exists
+func (m *Matchmaker) HasUser(key string) (bool, error) {
+	return rdb.SIsMember(ctx, "users", key).Result()
 }

@@ -44,6 +44,10 @@ deps:
 test:
 	go test ./...
 
+# Run test to test server runs
+test-server:
+	./scripts/test_server_run.sh
+
 # Build for multiple platforms
 build-all: bin
 	GOOS=linux GOARCH=amd64 go build -o $(BINARY_PATH)-linux-amd64 .
