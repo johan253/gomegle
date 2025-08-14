@@ -22,7 +22,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-const (
+var (
 	host         = "localhost"
 	port         = "23234"
 	hostKeyPath  = ".ssh/id_ed25519"
@@ -37,6 +37,12 @@ var (
 func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Warn("Could not load .env file", "error", err)
+	}
+	if os.Getenv("HOST") != "" {
+		host = os.Getenv("HOST")
+	}
+	if os.Getenv("PORT") != "" {
+		port = os.Getenv("PORT")
 	}
 	// Initialize global matchmaker
 	globalMatchmaker = NewMatchmaker()

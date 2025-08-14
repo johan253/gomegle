@@ -1,0 +1,8 @@
+.git/
+frontend/
+bin/
+.ssh/
+.github/
+.env/
+NOTES*
+*.bak
