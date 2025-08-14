@@ -33,10 +33,7 @@ q      - Exit this help menu
 ctrl+c - Exit the app at any time
 `
 
-var (
-	gap         = "\n\n" // Space between components
-	splashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-)
+var gap = "\n\n" // Space between components
 
 // errMsg is used to encapsulate error messages into Bubble Tea Msgs.
 type errMsg error
@@ -66,6 +63,7 @@ type model struct {
 	splashText      string             // Currently displayed splash message
 	splashTextIndex int                // Index of next char to append to splashText
 	splashSpinner   spinner.Model      // Spinner animation during splash
+	splashStyle     lipgloss.Style     // Style for splash text
 	viewport        viewport.Model     // Scrollable text window for chat
 	messages        []string           // All messages displayed
 	textarea        textarea.Model     // Input field for user to type messages
@@ -106,6 +104,10 @@ func initialModel(s ssh.Session) model {
 	// Splash screen timer and spinner
 	timer := timer.NewWithInterval(2*time.Second, 30*time.Millisecond)
 	r := bubbletea.MakeRenderer(s)
+	ta.FocusedStyle.Placeholder = r.NewStyle().Inherit(ta.FocusedStyle.Placeholder)
+	ta.Cursor.Style = r.NewStyle().Inherit(ta.Cursor.Style)
+	ta.BlurredStyle.Placeholder = r.NewStyle().Inherit(ta.BlurredStyle.Placeholder)
+	ta.Cursor.TextStyle = r.NewStyle().Inherit(ta.Cursor.TextStyle)
 
 	ss := spinner.New()
 	ss.Spinner = spinner.Dot
@@ -134,11 +136,12 @@ func initialModel(s ssh.Session) model {
 		splashText:      "",
 		splashTextIndex: 0,
 		splashSpinner:   ss,
+		splashStyle:     r.NewStyle().Foreground(lipgloss.Color("3")),
 		textarea:        ta,
 		messages:        []string{welcomeMessage},
 		viewport:        vp,
-		senderStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		receiverStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		senderStyle:     r.NewStyle().Foreground(lipgloss.Color("5")),
+		receiverStyle:   r.NewStyle().Foreground(lipgloss.Color("3")),
 		user:            user,
 		uiState:         StateUIMenu,
 		chatState:       StateChatDisconnected,
@@ -400,10 +403,10 @@ func splashView(m model) string {
 	if m.splashTextIndex >= len(splashMessage) {
 		spinnerText = m.splashSpinner.View()
 	}
-	return lipgloss.Place(
+	return m.renderer.Place(
 		m.width, m.height,
 		lipgloss.Center, lipgloss.Center,
-		fmt.Sprintf("%s %s", m.splashText, splashStyle.Render(spinnerText)),
+		fmt.Sprintf("%s %s", m.splashText, m.splashStyle.Render(spinnerText)),
 	)
 }
 
