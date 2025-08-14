@@ -76,6 +76,7 @@ type model struct {
 	uiState         UIState            // Current state of the UI
 	chatState       ChatState          // Current state of the chat
 	autoRequeue     bool               // Whether to auto-requeue after disconnect
+	incrFailed      bool               // Whether incrementing active users failed
 }
 
 // teaHandler wires a Bubble Tea model to a new SSH session.
@@ -119,9 +120,11 @@ func initialModel(s ssh.Session) model {
 		pubsub:  pubsub,
 		receive: ch, // Buffered to prevent blocking
 	}
-
 	// Add user to matchmaker queue
 	// globalMatchmaker.Enqueue(user)
+	// Increment player count
+	_, err := rdb.Incr(ctx, "active").Result()
+	incrFailed := err != nil
 
 	return model{
 		width:           30,
@@ -140,6 +143,7 @@ func initialModel(s ssh.Session) model {
 		uiState:         StateUIMenu,
 		chatState:       StateChatDisconnected,
 		autoRequeue:     false, // Auto-requeue disabled by default
+		incrFailed:      incrFailed,
 	}
 }
 
@@ -267,6 +271,9 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 		}
 		if err := m.user.pubsub.Close(); err != nil { // Close the user's pubsub channel
 			fmt.Printf("Error closing pubsub: %v\n", err)
+		}
+		if !m.incrFailed {
+			rdb.Decr(ctx, "active") // Decrement active users
 		}
 		// Exit the program
 		return m, tea.Quit
