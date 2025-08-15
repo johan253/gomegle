@@ -3,3 +3,4 @@
 **/*.bak
 .ssh/
 bin/
+**/*.tar.gz

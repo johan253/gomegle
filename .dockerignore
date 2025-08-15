@@ -3,6 +3,7 @@ frontend/
 bin/
 .ssh/
 .github/
-.env/
+**/.*env
+**/*.tar.gz
 NOTES*
 *.bak
