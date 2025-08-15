@@ -104,10 +104,8 @@ func initialModel(s ssh.Session) model {
 	// Splash screen timer and spinner
 	timer := timer.NewWithInterval(2*time.Second, 30*time.Millisecond)
 	r := bubbletea.MakeRenderer(s)
-	ta.FocusedStyle.Placeholder = r.NewStyle().Inherit(ta.FocusedStyle.Placeholder)
-	ta.Cursor.Style = r.NewStyle().Inherit(ta.Cursor.Style)
-	ta.BlurredStyle.Placeholder = r.NewStyle().Inherit(ta.BlurredStyle.Placeholder)
-	ta.Cursor.TextStyle = r.NewStyle().Inherit(ta.Cursor.TextStyle)
+	switchTextAreaStyle(&ta, r)               // Apply renderer styles to textarea
+	vp.Style = r.NewStyle().Inherit(vp.Style) // Apply renderer styles to viewport
 
 	ss := spinner.New()
 	ss.Spinner = spinner.Dot
@@ -148,6 +146,31 @@ func initialModel(s ssh.Session) model {
 		autoRequeue:     false, // Auto-requeue disabled by default
 		incrFailed:      incrFailed,
 	}
+}
+
+// switchTextAreaStyle switches the textarea styles to use the renderer's styles.
+func switchTextAreaStyle(ta *textarea.Model, r *lipgloss.Renderer) {
+	// Apply renderer to cursor
+	ta.Cursor.Style = r.NewStyle().Inherit(ta.Cursor.Style)
+	ta.Cursor.TextStyle = r.NewStyle().Inherit(ta.Cursor.TextStyle)
+	// Apply renderer to focused styles
+	ta.FocusedStyle.Base = r.NewStyle().Inherit(ta.FocusedStyle.Base)
+	ta.FocusedStyle.CursorLine = r.NewStyle().Inherit(ta.FocusedStyle.CursorLine)
+	ta.FocusedStyle.Placeholder = r.NewStyle().Inherit(ta.FocusedStyle.Placeholder)
+	ta.FocusedStyle.CursorLineNumber = r.NewStyle().Inherit(ta.FocusedStyle.CursorLineNumber)
+	ta.FocusedStyle.EndOfBuffer = r.NewStyle().Inherit(ta.FocusedStyle.EndOfBuffer)
+	ta.FocusedStyle.Placeholder = r.NewStyle().Inherit(ta.FocusedStyle.Placeholder)
+	ta.FocusedStyle.Prompt = r.NewStyle().Inherit(ta.FocusedStyle.Prompt)
+	ta.FocusedStyle.Text = r.NewStyle().Inherit(ta.FocusedStyle.Text)
+	// Apply renderer to blurred styles
+	ta.BlurredStyle.Base = r.NewStyle().Inherit(ta.BlurredStyle.Base)
+	ta.BlurredStyle.CursorLine = r.NewStyle().Inherit(ta.BlurredStyle.CursorLine)
+	ta.BlurredStyle.Placeholder = r.NewStyle().Inherit(ta.BlurredStyle.Placeholder)
+	ta.BlurredStyle.CursorLineNumber = r.NewStyle().Inherit(ta.BlurredStyle.CursorLineNumber)
+	ta.BlurredStyle.EndOfBuffer = r.NewStyle().Inherit(ta.BlurredStyle.EndOfBuffer)
+	ta.BlurredStyle.Placeholder = r.NewStyle().Inherit(ta.BlurredStyle.Placeholder)
+	ta.BlurredStyle.Prompt = r.NewStyle().Inherit(ta.BlurredStyle.Prompt)
+	ta.BlurredStyle.Text = r.NewStyle().Inherit(ta.BlurredStyle.Text)
 }
 
 // Init initializes the Bubble Tea program with starting commands.
