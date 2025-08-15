@@ -12,7 +12,7 @@ bin:
 	mkdir -p bin
 
 # Build the application
-build: bin
+build: bin deps
 	go build -o $(BINARY_PATH) .
 
 # Format the code

@@ -5,7 +5,7 @@ make run &
 SERVER_PID=$!
 
 # Wait a few seconds to let the server start
-sleep 3
+sleep 10
 
 # Check if the process is still running
 if ps -p $SERVER_PID >/dev/null; then
