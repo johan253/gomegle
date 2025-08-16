@@ -43,27 +43,3 @@ jobs:
           context: ./frontend
           push: true
           tags: ghcr.io/johan253/gomegle-web:latest
-
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up `kubectl`
-        uses: azure/setup-kubectl@v3
-        with:
-          version: "latest"
-
-      - name: Configure `KUBECONFIG`
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-          export KUBECONFIG=~/.kube/config
-
-      - name: Rollout restart deployment
-        run: kubectl rollout restart deployment gomegle -n gomegle
-
-      - name: Remove `KUBECONFIG`
-        run: rm ~/.kube/config
