@@ -117,7 +117,7 @@ export default function GomegleLanding() {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="mt-4 max-w-prose text-zinc-300"
             >
-              Gomegle pairs you with a stranger in a secure TTY. No browser. No frills. Just raw, low-latency conversation—right from your shell.
+              Gomegle pairs you with a stranger in a secure PTY. No browser. No frills. Just raw, low-latency conversation—right from your shell.
             </motion.p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
