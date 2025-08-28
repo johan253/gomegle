@@ -2,9 +2,11 @@ FROM golang:alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache make
+RUN apk add --no-cache make protobuf
 
 COPY go.mod go.sum Makefile ./
+
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 RUN make deps
 
