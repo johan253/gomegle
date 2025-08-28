@@ -40,5 +40,11 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
 
+      - name: Setup Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
       - name: Test server run
         run: make test-server
