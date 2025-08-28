@@ -24,7 +24,8 @@ jobs:
 
       - name: Setup Dependencies
         run: |
-          sudo apt-get install protobuf
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
           go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
       - name: Build application
