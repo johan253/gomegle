@@ -36,7 +36,10 @@ ctrl+c - Exit the app at any time
 var gap = "\n\n" // Space between components
 
 // errMsg is used to encapsulate error messages into Bubble Tea Msgs.
-type errMsg error
+type (
+	errMsg          error
+	chatMsgReceived *ChatMsg
+)
 
 type UIState int
 
@@ -364,7 +367,7 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (model, tea.Cmd) {
 				}
 			default:
 				if m.chatState == StateChatMatched {
-					chatMsg := ChatMsg{
+					chatMsg := &ChatMsg{
 						Type:    ChatMsgTypeMessage,
 						Content: strings.TrimSpace(m.textarea.Value()),
 					}

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option go_package = "github.com/johan253/gomegle/main";
+
+enum ChatMsgType {
+  MESSAGE = 0;
+  JOIN = 1;
+  LEAVE = 2;
+  ERROR = 3;
+}
+
+message ChatMsg {
+  ChatMsgType type = 1;
+  string content = 2;
+}

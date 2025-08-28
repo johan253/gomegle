@@ -3,10 +3,10 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/proto"
 )
 
 const lockKey = "match_lock"
@@ -86,9 +86,9 @@ func (m *Matchmaker) matchmakingLoop() {
 			Type:    ChatMsgTypeJoin,
 			Content: u1,
 		}
-		data, _ := json.Marshal(joinMsg1)
+		data, _ := proto.Marshal(&joinMsg1)
 		rdb.Publish(ctx, "user:"+u1, data)
-		data, _ = json.Marshal(joinMsg2)
+		data, _ = proto.Marshal(&joinMsg2)
 		rdb.Publish(ctx, "user:"+u2, data)
 
 		rdb.SRem(ctx, "users", u1, u2) // Remove users from the active set
