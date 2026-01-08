@@ -11,8 +11,12 @@ BINARY_PATH=bin/$(BINARY_NAME)
 bin:
 	mkdir -p bin
 
+# Build the protobuf files
+proto:
+	protoc --go_out=. --go_opt=paths=source_relative models.proto
+
 # Build the application
-build: bin deps
+build: deps proto bin
 	go build -o $(BINARY_PATH) .
 
 # Format the code
@@ -69,4 +73,4 @@ help:
 	@echo "  help       - Show this help message"
 
 # Declare phony targets
-.PHONY: build fmt lint run dev clean deps test build-all help
+.PHONY: build fmt lint run dev clean deps test build-all help proto

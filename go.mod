@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/charmbracelet/ssh v0.0.0-20250429213052-383d50896132
 	github.com/charmbracelet/wish v1.4.7
+	google.golang.org/protobuf v1.33.0
 )
 
 require (

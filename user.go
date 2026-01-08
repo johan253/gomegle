@@ -1,10 +1,9 @@
 package main
 
 import (
-	"encoding/json"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/proto"
 )
 
 // User represents a user in the matchmaker system
@@ -22,8 +21,8 @@ func (u *User) ListenForMessages() tea.Cmd {
 		if !ok {
 			return tea.Quit // If the channel is closed, quit the program
 		}
-		var msg ChatMsg
-		if err := json.Unmarshal([]byte(content.Payload), &msg); err != nil {
+		msg := &ChatMsg{}
+		if err := proto.Unmarshal([]byte(content.Payload), msg); err != nil {
 			return tea.Quit // If there's an error, quit the program
 		}
 		return chatMsgReceived(msg)
@@ -32,11 +31,11 @@ func (u *User) ListenForMessages() tea.Cmd {
 
 // SendMessage sends a message to the user's match channel. If the
 // send channel (string identifier) is empty, this function does nothing.
-func (u *User) SendMessage(msg ChatMsg) error {
+func (u *User) SendMessage(msg *ChatMsg) error {
 	if u.send == "" {
 		return nil // If the send channel is not set, do nothing
 	}
-	data, err := json.Marshal(msg)
+	data, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -44,7 +43,7 @@ func (u *User) SendMessage(msg ChatMsg) error {
 }
 
 func (u *User) LeaveChat() error {
-	leaveMsg := ChatMsg{
+	leaveMsg := &ChatMsg{
 		Type:    ChatMsgTypeLeave,
 		Content: "Stranger has left the chat",
 	}
