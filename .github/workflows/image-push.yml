@@ -62,12 +62,12 @@ jobs:
           version: 18.5.0
       - name: Fetch credentials using Machine ID
         id: auth
-        uses: teleport-actions/auth@v2
+        uses: teleport-actions/auth-k8s@v2
         with:
           proxy: teleport.johanhernandez.com:443
           token: github-actions-cd
+          kubernetes-cluster: prd
       - name: Rollout Kubernetes Deployment
         run: |
-          tsh kube login prd
           kubectl -n gomegle rollout restart deployment gomegle
           kubectl -n gomegle rollout restart deployment gomegle-web
