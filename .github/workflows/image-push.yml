@@ -21,16 +21,17 @@ jobs:
           username: johan253
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v3
+      #
+      # - name: Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v3
 
       - name: Build and push server to Github
         uses: docker/build-push-action@v5
         with:
-          platforms: linux/amd64,linux/arm64
+          # platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           context: .
           push: true
           tags: ghcr.io/johan253/gomegle:latest
@@ -38,7 +39,35 @@ jobs:
       - name: Build and push web to Github
         uses: docker/build-push-action@v5
         with:
-          platforms: linux/amd64,linux/arm64
+          # platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           context: ./frontend
           push: true
           tags: ghcr.io/johan253/gomegle-web:latest
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+    name: github-actions-gomegle-deployment
+    runs-on: ubuntu-latest
+    needs: push
+    steps:
+      - name: Set up `kubectl`
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "latest"
+      - name: Fetch Teleport binaries
+        uses: teleport-actions/setup@v1
+        with:
+          version: 18.5.0
+      - name: Fetch credentials using Machine ID
+        id: auth
+        uses: teleport-actions/auth@v2
+        with:
+          proxy: teleport.johanhernandez.com:443
+          token: github-actions-cd
+      - name: Rollout Kubernetes Deployment
+        run: |
+          tsh kube login prd
+          kubectl -n gomegle rollout restart deployment gomegle
+          kubectl -n gomegle rollout restart deployment gomegle-web
