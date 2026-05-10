@@ -1,0 +1,36 @@
+backend:
+  replicas: 2
+  image:
+    repository: ghcr.io/johan253/gomegle
+    tag: latest
+    pullPolicy: Always
+  port: 23234
+  envSecret: gomegle-env
+  sshSecret: gomegle-ssh-hostkey
+
+redis:
+  replicas: 1
+  image:
+    repository: redis
+    tag: alpine
+
+web:
+  replicas: 2
+  image:
+    repository: ghcr.io/johan253/gomegle-web
+    tag: latest
+    pullPolicy: Always
+  port: 3000
+  envSecret: gomegle-env
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - gomegle.sh
+    - www.gomegle.sh
+  tls:
+    secretName: gomegle-tls

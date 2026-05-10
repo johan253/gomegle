@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Release.Name }}
+          image: {{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.backend.envSecret }}
+          ports:
+            - containerPort: {{ .Values.backend.port }}
+              name: tcp
+              protocol: TCP
+          volumeMounts:
+            - name: ssh-hostkey
+              mountPath: /app/.ssh/id_ed25519
+              subPath: id_ed25519
+              readOnly: true
+            - name: ssh-hostkey
+              mountPath: /app/.ssh/id_ed25519.pub
+              subPath: id_ed25519.pub
+              readOnly: true
+      volumes:
+        - name: ssh-hostkey
+          secret:
+            secretName: {{ .Values.backend.sshSecret }}
+            defaultMode: 0600
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.redis.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-redis
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-redis
+    spec:
+      containers:
+        - name: {{ .Release.Name }}-redis
+          image: {{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}
+          ports:
+            - containerPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-web
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-web
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-web
+    spec:
+      containers:
+        - name: {{ .Release.Name }}-web
+          image: {{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.web.envSecret }}
+          env:
+            - name: PORT
+              value: {{ .Values.web.port | quote }}
+          ports:
+            - containerPort: {{ .Values.web.port }}
