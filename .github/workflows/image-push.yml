@@ -55,30 +55,30 @@ jobs:
           tags: |
             ghcr.io/johan253/gomegle-web:latest
             ghcr.io/johan253/gomegle-web:${{ steps.tag.outputs.value }}
-  deploy:
-    permissions:
-      id-token: write
-      contents: read
-    name: github-actions-gomegle-deployment
-    runs-on: ubuntu-latest
-    needs: push
-    steps:
-      - name: Set up `kubectl`
-        uses: azure/setup-kubectl@v3
-        with:
-          version: "latest"
-      - name: Fetch Teleport binaries
-        uses: teleport-actions/setup@v1
-        with:
-          version: 18.5.0
-      - name: Fetch credentials using Machine ID
-        id: auth
-        uses: teleport-actions/auth-k8s@v2
-        with:
-          proxy: teleport.johanhernandez.com:443
-          token: github-actions-cd
-          kubernetes-cluster: prd
-      - name: Rollout Kubernetes Deployment
-        run: |
-          kubectl -n gomegle rollout restart deployment gomegle
-          kubectl -n gomegle rollout restart deployment gomegle-web
+  # deploy:
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   name: github-actions-gomegle-deployment
+  #   runs-on: ubuntu-latest
+  #   needs: push
+  #   steps:
+  #     - name: Set up `kubectl`
+  #       uses: azure/setup-kubectl@v3
+  #       with:
+  #         version: "latest"
+  #     - name: Fetch Teleport binaries
+  #       uses: teleport-actions/setup@v1
+  #       with:
+  #         version: 18.5.0
+  #     - name: Fetch credentials using Machine ID
+  #       id: auth
+  #       uses: teleport-actions/auth-k8s@v2
+  #       with:
+  #         proxy: teleport.johanhernandez.com:443
+  #         token: github-actions-cd
+  #         kubernetes-cluster: prd
+  #     - name: Rollout Kubernetes Deployment
+  #       run: |
+  #         kubectl -n gomegle rollout restart deployment gomegle
+  #         kubectl -n gomegle rollout restart deployment gomegle-web
