@@ -40,7 +40,7 @@ spec:
       volumes:
         - name: ssh-hostkey
           secret:
-            secretName: {{ .Values.backend.sshSecret }}
+            secretName: {{ .Values.externalSecret.secretName }}
             defaultMode: 0600
 ---
 apiVersion: apps/v1
