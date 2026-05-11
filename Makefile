@@ -3,6 +3,9 @@
 # Variables
 BINARY_NAME=gomegle
 BINARY_PATH=bin/$(BINARY_NAME)
+GIT_TAG := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+GIT_SHA := $(shell git rev-parse --short HEAD)
+IMAGE_TAG := $(GIT_TAG)-$(GIT_SHA)
 
 # Default target
 .DEFAULT_GOAL := build
@@ -58,6 +61,10 @@ build-all: bin
 	GOOS=darwin GOARCH=amd64 go build -o $(BINARY_PATH)-darwin-amd64 .
 	GOOS=windows GOARCH=amd64 go build -o $(BINARY_PATH)-windows-amd64.exe .
 
+# Print the current image tag
+image-tag:
+	@echo $(IMAGE_TAG)
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -70,7 +77,8 @@ help:
 	@echo "  deps       - Download and tidy dependencies"
 	@echo "  test       - Run tests"
 	@echo "  build-all  - Build for multiple platforms"
+	@echo "  image-tag  - Print the current image tag (<git_tag>-<git_sha>)"
 	@echo "  help       - Show this help message"
 
 # Declare phony targets
-.PHONY: build fmt lint run dev clean deps test build-all help proto
+.PHONY: build fmt lint run dev clean deps test build-all help proto image-tag
