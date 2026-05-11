@@ -13,6 +13,12 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute image tag
+        id: tag
+        run: echo "value=$(make image-tag)" >> $GITHUB_OUTPUT
 
       - name: Login to Github
         uses: docker/login-action@v3
@@ -34,7 +40,9 @@ jobs:
           platforms: linux/amd64
           context: .
           push: true
-          tags: ghcr.io/johan253/gomegle:latest
+          tags: |
+            ghcr.io/johan253/gomegle:latest
+            ghcr.io/johan253/gomegle:${{ steps.tag.outputs.value }}
 
       - name: Build and push web to Github
         uses: docker/build-push-action@v5
@@ -43,31 +51,33 @@ jobs:
           platforms: linux/amd64
           context: ./frontend
           push: true
-          tags: ghcr.io/johan253/gomegle-web:latest
-  deploy:
-    permissions:
-      id-token: write
-      contents: read
-    name: github-actions-gomegle-deployment
-    runs-on: ubuntu-latest
-    needs: push
-    steps:
-      - name: Set up `kubectl`
-        uses: azure/setup-kubectl@v3
-        with:
-          version: "latest"
-      - name: Fetch Teleport binaries
-        uses: teleport-actions/setup@v1
-        with:
-          version: 18.5.0
-      - name: Fetch credentials using Machine ID
-        id: auth
-        uses: teleport-actions/auth-k8s@v2
-        with:
-          proxy: teleport.johanhernandez.com:443
-          token: github-actions-cd
-          kubernetes-cluster: prd
-      - name: Rollout Kubernetes Deployment
-        run: |
-          kubectl -n gomegle rollout restart deployment gomegle
-          kubectl -n gomegle rollout restart deployment gomegle-web
+          tags: |
+            ghcr.io/johan253/gomegle-web:latest
+            ghcr.io/johan253/gomegle-web:${{ steps.tag.outputs.value }}
+  # deploy:
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   name: github-actions-gomegle-deployment
+  #   runs-on: ubuntu-latest
+  #   needs: push
+  #   steps:
+  #     - name: Set up `kubectl`
+  #       uses: azure/setup-kubectl@v3
+  #       with:
+  #         version: "latest"
+  #     - name: Fetch Teleport binaries
+  #       uses: teleport-actions/setup@v1
+  #       with:
+  #         version: 18.5.0
+  #     - name: Fetch credentials using Machine ID
+  #       id: auth
+  #       uses: teleport-actions/auth-k8s@v2
+  #       with:
+  #         proxy: teleport.johanhernandez.com:443
+  #         token: github-actions-cd
+  #         kubernetes-cluster: prd
+  #     - name: Rollout Kubernetes Deployment
+  #       run: |
+  #         kubectl -n gomegle rollout restart deployment gomegle
+  #         kubectl -n gomegle rollout restart deployment gomegle-web
