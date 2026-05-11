@@ -1,4 +1,4 @@
-name: Build App
+name: Build and Test App
 
 on: [push, pull_request]
 jobs:
@@ -33,6 +33,16 @@ jobs:
 
   server:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
