@@ -5,8 +5,10 @@ backend:
     tag: latest
     pullPolicy: Always
   port: 23234
-  envSecret: gomegle-env
   sshSecret: gomegle-ssh-hostkey
+  env:
+    HOST: "0.0.0.0"
+    REDIS_URL: "redis://gomegle-redis:6379"
 
 redis:
   replicas: 1
@@ -21,7 +23,17 @@ web:
     tag: latest
     pullPolicy: Always
   port: 3000
-  envSecret: gomegle-env
+  env:
+    HOST: "0.0.0.0"
+    REDIS_URL: "redis://gomegle-redis:6379"
+
+externalSecret:
+  secretStore:
+    name: infisical
+    kind: ClusterSecretStore
+  sshKey:
+    privateKeyRemoteRef: gomegle-ssh-priv
+    publicKeyRemoteRef: gomegle-ssh-pub
 
 ingress:
   enabled: true

@@ -17,9 +17,13 @@ spec:
         - name: {{ .Release.Name }}
           image: {{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
-          envFrom:
-            - secretRef:
-                name: {{ .Values.backend.envSecret }}
+          env:
+            - name: HOST
+              value: {{ .Values.backend.env.HOST | quote }}
+            - name: PORT
+              value: {{ .Values.backend.port | quote }}
+            - name: REDIS_URL
+              value: {{ .Values.backend.env.REDIS_URL | quote }}
           ports:
             - containerPort: {{ .Values.backend.port }}
               name: tcp
@@ -79,11 +83,12 @@ spec:
         - name: {{ .Release.Name }}-web
           image: {{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
-          envFrom:
-            - secretRef:
-                name: {{ .Values.web.envSecret }}
           env:
+            - name: HOST
+              value: {{ .Values.web.env.HOST | quote }}
             - name: PORT
               value: {{ .Values.web.port | quote }}
+            - name: REDIS_URL
+              value: {{ .Values.web.env.REDIS_URL | quote }}
           ports:
             - containerPort: {{ .Values.web.port }}
