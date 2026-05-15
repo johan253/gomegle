@@ -15,10 +15,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Pushing Helm Chart
         run: |
-          REPO_OWNER=`echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]'`
-          # create chart package for chart `my-app`
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
           make helm-build
-          # Get packed chart file name
           PKG_NAME=`ls *.tgz`
-          # pushing `my-app-1.0.0.tgz` to registry
           helm push ${PKG_NAME} oci://ghcr.io/johan253/charts
