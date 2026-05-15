@@ -69,7 +69,7 @@ helm-lint:
 	helm lint helm/
 
 helm-build: helm-lint
-	helm package helm/ -d bin/
+	helm package helm/
 
 # Help target
 help:
