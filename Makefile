@@ -56,7 +56,7 @@ test-server:
 	./scripts/test_server_run.sh
 
 # Build for multiple platforms
-build-all: bin
+build-all: bin helm-build
 	GOOS=linux GOARCH=amd64 go build -o $(BINARY_PATH)-linux-amd64 .
 	GOOS=darwin GOARCH=amd64 go build -o $(BINARY_PATH)-darwin-amd64 .
 	GOOS=windows GOARCH=amd64 go build -o $(BINARY_PATH)-windows-amd64.exe .
@@ -64,6 +64,12 @@ build-all: bin
 # Print the current image tag
 image-tag:
 	@echo $(IMAGE_TAG)
+
+helm-lint:
+	helm lint helm/
+
+helm-build: helm-lint
+	helm package helm/ -d bin/
 
 # Help target
 help:
@@ -81,4 +87,4 @@ help:
 	@echo "  help       - Show this help message"
 
 # Declare phony targets
-.PHONY: build fmt lint run dev clean deps test build-all help proto image-tag
+.PHONY: build fmt lint run dev clean deps test build-all help proto image-tag helm-lint helm-build

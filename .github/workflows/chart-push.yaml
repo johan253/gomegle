@@ -1,0 +1,22 @@
+name: Build and push Helm chart to ghcr.io
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  push:
+    name: Push Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+      - name: Pushing Helm Chart
+        run: |
+          REPO_OWNER=`echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]'`
+          # create chart package for chart `my-app`
+          make helm-build
+          # Get packed chart file name
+          PKG_NAME=`ls *.tgz`
+          # pushing `my-app-1.0.0.tgz` to registry
+          helm push ${PKG_NAME} oci://ghcr.io/johan253/charts

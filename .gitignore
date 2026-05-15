@@ -4,3 +4,4 @@
 .ssh/
 bin/
 **/*.tar.gz
+*.tgz
