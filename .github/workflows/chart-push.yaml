@@ -2,7 +2,7 @@ name: Build and push Helm chart to ghcr.io
 on:
   push:
     branches:
-      - dev
+      - main
 
 jobs:
   push:
