@@ -3,9 +3,9 @@
 # Variables
 BINARY_NAME=gomegle
 BINARY_PATH=bin/$(BINARY_NAME)
-GIT_TAG := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+HELM_TAG := $(shell helm show chart helm/ | grep '^version:' | awk '{print $$2}')
 GIT_SHA := $(shell git rev-parse --short HEAD)
-IMAGE_TAG := $(GIT_TAG)-$(GIT_SHA)
+IMAGE_TAG := $(HELM_TAG)-$(GIT_SHA)
 
 # Default target
 .DEFAULT_GOAL := build
@@ -62,14 +62,14 @@ build-all: bin helm-build
 	GOOS=windows GOARCH=amd64 go build -o $(BINARY_PATH)-windows-amd64.exe .
 
 # Print the current image tag
-image-tag:
+tag:
 	@echo $(IMAGE_TAG)
 
 helm-lint:
 	helm lint helm/
 
 helm-build: helm-lint
-	helm package helm/
+	helm package helm/ --version $(IMAGE_TAG)
 
 # Help target
 help:
@@ -83,7 +83,7 @@ help:
 	@echo "  deps       - Download and tidy dependencies"
 	@echo "  test       - Run tests"
 	@echo "  build-all  - Build for multiple platforms"
-	@echo "  image-tag  - Print the current image tag (<git_tag>-<git_sha>)"
+	@echo "  tag        - Print the current image tag (<chart_tag>-<git_sha>)"
 	@echo "  help       - Show this help message"
 
 # Declare phony targets
