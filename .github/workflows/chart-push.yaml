@@ -1,0 +1,21 @@
+name: Build and push Helm chart to ghcr.io
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  push:
+    name: Push Helm chart
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+      - name: Pushing Helm Chart
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
+          make helm-build
+          PKG_NAME=`ls *.tgz`
+          helm push ${PKG_NAME} oci://ghcr.io/johan253/charts
