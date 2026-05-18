@@ -44,3 +44,6 @@ ingress:
     - www.gomegle.sh
   tls:
     secretName: gomegle-tls
+    
+# Define any additional Kubernetes objects you want to create with this chart here. This can be used for things like ConfigMaps, Secrets, etc.
+extraObjects: []
