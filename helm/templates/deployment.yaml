@@ -19,11 +19,11 @@ spec:
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           env:
             - name: HOST
-              value: {{ .Values.backend.env.HOST | quote }}
+              value: {{ .Values.backend.host | quote }}
             - name: PORT
               value: {{ .Values.backend.port | quote }}
             - name: REDIS_URL
-              value: {{ .Values.backend.env.REDIS_URL | quote }}
+              value: {{ .Values.backend.redisUrl | quote }}
           ports:
             - containerPort: {{ .Values.backend.port }}
               name: tcp
@@ -85,10 +85,10 @@ spec:
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
           env:
             - name: HOST
-              value: {{ .Values.web.env.HOST | quote }}
+              value: {{ .Values.web.host | quote }}
             - name: PORT
               value: {{ .Values.web.port | quote }}
             - name: REDIS_URL
-              value: {{ .Values.web.env.REDIS_URL | quote }}
+              value: {{ .Values.web.redisUrl | quote }}
           ports:
             - containerPort: {{ .Values.web.port }}
