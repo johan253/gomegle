@@ -5,9 +5,8 @@ backend:
     tag: latest
     pullPolicy: Always
   port: 23234
-  env:
-    HOST: "0.0.0.0"
-    REDIS_URL: "redis://gomegle-redis:6379"
+  host: "0.0.0.0"
+  redisUrl: "gomegle-redis:6379"
 
 redis:
   replicas: 1
@@ -22,9 +21,8 @@ web:
     tag: latest
     pullPolicy: Always
   port: 3000
-  env:
-    HOST: "0.0.0.0"
-    REDIS_URL: "redis://gomegle-redis:6379"
+  host: "0.0.0.0"
+  redisUrl: "redis://gomegle-redis:6379"
 
 externalSecret:
   secretName: gomegle-ssh-hostkey
@@ -36,7 +34,7 @@ externalSecret:
     publicKeyRemoteRef: /gomegle/ssh-pub
 
 ingress:
-  enabled: true
+  enabled: false
   className: traefik
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-http
@@ -46,3 +44,6 @@ ingress:
     - www.gomegle.sh
   tls:
     secretName: gomegle-tls
+    
+# Define any additional Kubernetes objects you want to create with this chart here. This can be used for things like ConfigMaps, Secrets, etc.
+extraObjects: []
