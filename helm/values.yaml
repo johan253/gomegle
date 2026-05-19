@@ -43,6 +43,9 @@ ingress:
     - gomegle.sh
     - www.gomegle.sh
   tls:
+    issuer:
+      name: letsencrypt-http
+      kind: ClusterIssuer
     secretName: gomegle-tls
     
 # Define any additional Kubernetes objects you want to create with this chart here. This can be used for things like ConfigMaps, Secrets, etc.
