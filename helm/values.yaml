@@ -47,6 +47,11 @@ ingress:
       name: letsencrypt-http
       kind: ClusterIssuer
     secretName: gomegle-tls
+  rateLimit:
+    enabled: true
+    average: 50
+    burst: 100
+    period: 1s
     
 # Define any additional Kubernetes objects you want to create with this chart here. This can be used for things like ConfigMaps, Secrets, etc.
 extraObjects: []
